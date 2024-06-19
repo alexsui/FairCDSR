@@ -1,23 +1,16 @@
 import os
-import sys
-from datetime import datetime
-import time
 import numpy as np
 import random
-import argparse
 from pathlib import Path
 import torch
-
 from utils import torch_utils, helper
-from utils.GraphMaker import GraphMaker
-from model.trainer import CDSRTrainer, Pretrainer
+from model.trainer import CDSRTrainer
 from utils.loader import *
 from utils.MoCo_utils import compute_features
 from utils.cluster import run_kmeans
 from utils.collator import CLDataCollator
 from model.item_generator import Generator
 from config.config import get_args
-
 
 def main(args):
     def seed_everything(seed=1111):

@@ -73,9 +73,9 @@ class Evaluator:
             result_str += str({"Best overall": best_test})+"\n"
             result_str += str({"Best male":best_test_male})+"\n"
             result_str += str({"Best female":best_test_female})+"\n"
-            print("test overall",best_test)
-            print("test male:",best_test_male)
-            print("test female:",best_test_female)
+            print(f"test overall: MRR-{best_test[0]}, NDCG_5-{best_test[1]}, NDCG_10-{best_test[2]}, HR_5-{best_test[3]}, HR_10-{best_test[4]}")
+            print(f"test male: MRR-{best_test_male[0]}, NDCG_5-{best_test_male[1]}, NDCG_10-{best_test_male[2]}, HR_5-{best_test_male[3]}, HR_10-{best_test_male[4]}")
+            print(f"test female: MRR-{best_test_female[0]}, NDCG_5-{best_test_female[1]}, NDCG_10-{best_test_female[2]}, HR_5-{best_test_female[3]}, HR_10-{best_test_female[4]}")
             file_logger.log(result_str)
         return best_test, best_test_male,best_test_female
     def cal_test_score(self, predictions):

@@ -1,4 +1,5 @@
 *.txt
+*.npy
 *.pt
 *.csv
 __pycache__/
