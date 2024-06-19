@@ -101,7 +101,6 @@ parser.add_argument(
 )
 
 # early stop
-parser.add_argument("--pretrain_patience", type=int, default=1000, help="early stop counter")
 parser.add_argument("--finetune_patience", type=int, default=5, help="early stop counter")
 
 parser.add_argument("--pooling", type=str, default="ave", help="pooling method")

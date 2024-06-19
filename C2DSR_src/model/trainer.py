@@ -181,7 +181,7 @@ class GTrainer(Trainer):
         num_batch = len(train_dataloader)
         max_steps =  self.opt['pretrain_epoch'] * num_batch
         print("Start training:")        
-        patience =  self.opt["pretrain_patience"]
+        patience =  self.opt["finetune_patience"]
         train_pred_loss = []
         val_pred_loss = []
         for epoch in range(1, self.opt['pretrain_epoch'] + 1):
@@ -202,7 +202,7 @@ class GTrainer(Trainer):
                 folder = self.opt['model_save_dir'] +f'{epoch}'
                 Path(folder).mkdir(parents=True, exist_ok=True)
                 self.save(folder + '/model.pt')
-            #validation
+            #validation => 最後
             if epoch%500==0:
                 self.model.eval()
                 with torch.no_grad():
@@ -215,14 +215,13 @@ class GTrainer(Trainer):
                         flatten_target_sentence = target_sentence.view(batch_size * seq_len)
                         mip_loss = self.CE_criterion(flatten_mip_res,flatten_target_sentence)
                         self.val_prediction_loss += mip_loss.item()
-                        # ipdb.set_trace()
                     print("-"*50)
                     print(f"Start validation at epoch {epoch}:")
                     print("validation mip loss:", self.val_prediction_loss/len(val_dataloader))
                     print("-"*50)
                     val_pred_loss.append(self.val_prediction_loss/len(val_dataloader))
                     if self.val_prediction_loss/len(val_dataloader) < min(val_pred_loss):
-                        patience =  self.opt["pretrain_patience"]
+                        patience =  self.opt["finetune_patience"]
                     else:
                         patience -= 1
                         print("Early stop counter:", 5-patience)
@@ -230,316 +229,6 @@ class GTrainer(Trainer):
                             print("Early stop at epoch", epoch)
                             self.save(self.opt['model_save_dir'] + '/best_model.pt')
                             break
-class Pretrainer(Trainer):
-    def __init__(self, opt, adj = None, adj_single = None):
-        self.opt = opt
-        if opt["model"] == "FairCDSR":
-            self.model = FairCDSR(opt, adj, adj_single)
-        else:
-            print("please select a valid model")
-            exit(0)
-        self.optimizer = torch_utils.get_optimizer(opt['optim'], self.model.parameters(), opt['lr'])
-        self.CE_criterion = nn.CrossEntropyLoss()
-        self.pred_criterion = nn.CrossEntropyLoss(reduction='none')
-        self.BCE_criterion = nn.BCELoss(reduction='none')
-        self.BCE_criterion_reduction = nn.BCELoss()
-        self.pretrain_loss = 0
-        self.pred_loss = 0
-        self.MoCo_X = MoCo(opt, self.model, dim = opt['hidden_units'], r = opt['r'], m = opt['m'], T = opt['temp'], mlp = opt['mlp'], domain = "X")
-        self.MoCo_Y = MoCo(opt, self.model, dim = opt['hidden_units'], r = opt['r'], m = opt['m'], T = opt['temp'], mlp = opt['mlp'], domain = "Y")
-        self.MoCo_mixed = MoCo(opt, self.model, dim = opt['hidden_units'], r = opt['r'], m = opt['m'], T = opt['temp'], mlp = opt['mlp'], domain = "mixed")
-        
-        self.mip_norm = nn.Linear(opt['hidden_units'], opt['hidden_units'])
-        
-        if opt['cuda']:
-            self.model.cuda()
-            self.MoCo_X.cuda()
-            self.MoCo_Y.cuda()
-            self.MoCo_mixed.cuda()
-            self.CE_criterion.cuda()
-            self.pred_criterion.cuda()
-            self.mip_norm.cuda()
-            self.BCE_criterion.cuda()
-        self.pooling = opt['pooling']
-        self.format_str = '{}: step {}/{} (epoch {}/{}), loss = {:.6f} ({:.3f} sec/epoch)'
-        
-    def MoCo_train(self, MoCo_model, augmented_seq, cluster_result = None, index = None, task = "in-domain", train_mode ="train", ts =None):
-        if self.opt['augment_type'] == "dropout":
-            logits, labels, proto_logits, proto_labels, equivariance_loss, time_ssl_task = MoCo_model(seq_q = augmented_seq, seq_k=augmented_seq, is_eval=False, cluster_result= cluster_result, index=index, task=task, train_mode = train_mode, ts = ts)
-        else:
-            logits, labels, proto_logits, proto_labels, equivariance_loss, time_ssl_task = MoCo_model(seq_q = augmented_seq[:,0,:], seq_k=augmented_seq[:,1,:], is_eval=False, cluster_result= cluster_result, index=index, train_mode = train_mode, task=task, ts =ts)
-        if task == "in-domain":
-            cl_loss = self.CE_criterion(logits, labels)
-            if self.opt['time_encode']:
-                time_ssl = self.CE_criterion(time_ssl_task['speed_classification'][0], time_ssl_task['speed_classification'][1]) + \
-                        self.BCE_criterion_reduction(time_ssl_task['direction_classification'][0], time_ssl_task['direction_classification'][1])
-                loss = cl_loss + self.opt['equivariance_weight']*equivariance_loss + self.opt['time_weight']*time_ssl
-            else:
-                loss = cl_loss
-        else:
-            loss = 0
-        if proto_logits is not None:
-            loss_proto = 0
-            if task == "in-domain":
-                for proto_out, proto_target in zip(proto_logits, proto_labels):
-                    loss_proto += self.CE_criterion(proto_out, proto_target)  
-            elif task == "cross-domain":
-                for proto_out in proto_logits:
-                    proto_out = proto_out + 1e-8 # avoid value equal to 0
-                    loss_proto += -torch.sum(proto_out*torch.log(proto_out))
-            loss_proto /= len(self.opt['num_cluster']) 
-            loss += loss_proto
-        if self.opt['time_encode']:
-            return loss, time_ssl_task['speed_classification'][2], time_ssl_task['direction_classification'][2]
-        else:
-            return loss
-    def get_sequence_embedding(self, data, encoder, item_embed):
-
-        non_zero_mask = (data != (self.opt["source_item_num"] +self.opt["target_item_num"])).long()
-        position_id = non_zero_mask.cumsum(dim=1) * non_zero_mask
-        seqs = item_embed(data)
-        seq_feature = encoder(data, seqs, position_id,  causality_mask = False)
-        # if self.pooling == "bert":
-        #     out = seq_feature[:,0,:]
-        # elif self.pooling == "ave":
-        #     out = torch.sum(seq_feature, dim=1)/torch.sum(non_zero_mask, dim=1).unsqueeze(-1)
-        return seq_feature
-    def get_item_score(self, sequence_output, target_item):
-        sequence_output = self.mip_norm(sequence_output.view([-1, self.opt['hidden_units']])) # [B*L H]
-        target_item = target_item.view([-1, self.opt['hidden_units']]) # [B*L H]
-        score = torch.mul(sequence_output, target_item) # [B*L H]
-        return torch.sigmoid(torch.sum(score, -1)) # [B*L]
-    def masked_item_prediction(self, pos_item, neg_item, masked_seq, enocoder, item_embed):
-        sequence_output = self.get_sequence_embedding(masked_seq, enocoder, item_embed) 
-        pos_item_embs = item_embed(pos_item)
-        neg_item_embs = item_embed(neg_item)
-        pos_score = self.get_item_score(sequence_output, pos_item_embs)
-        neg_score = self.get_item_score(sequence_output, neg_item_embs)
-        distance = torch.sigmoid(pos_score - neg_score)
-        mip_loss = self.BCE_criterion(distance, torch.ones_like(distance, dtype=torch.float32))
-        mip_mask = (masked_seq ==self.opt['itemnum']-1).float()
-        mip_loss = torch.sum(mip_loss * mip_mask.flatten())
-        return mip_loss
-    def train_batch(self, epoch, batch, i, cluster_result, mode = "train"):
-        self.model.train()
-        self.optimizer.zero_grad()
-        cluster_result_X, cluster_result_Y, cluster_result_cross = cluster_result[0], cluster_result[1], cluster_result[2]
-        index, seq, x_seq, y_seq, position, x_position, y_position, ts_d, ts_xd, ts_yd, ground, share_x_ground, share_y_ground, x_ground, y_ground, ground_mask, share_x_ground_mask, share_y_ground_mask, x_ground_mask, y_ground_mask, corru_x, corru_y,augmented_d, augmented_xd,augmented_yd,gender = self.unpack_batch(batch)
-        
-        
-        ssl_loss = torch.tensor(0, dtype = torch.float32).cuda()
-        if self.opt["ssl"]=="proto_CL":
-            if self.opt['time_encode']:
-                MoCo_loss_xd, speed_acc_xd, direction_acc_xd = self.MoCo_train(self.MoCo_X, augmented_xd, cluster_result = cluster_result_X, index = index, task = "in-domain",ts =ts_xd)
-                MoCo_loss_yd, speed_acc_yd, direction_acc_yd = self.MoCo_train(self.MoCo_Y, augmented_yd, cluster_result = cluster_result_Y, index = index, task = "in-domain",ts =ts_yd)
-                # MoCo_loss_mixed = self.MoCo_train(epoch,self.MoCo_mixed, augmented_d, cluster_result = cluster_result_cross, index=index, task = "in-domain",ts = ts_d)
-            else:
-                MoCo_loss_xd = self.MoCo_train(self.MoCo_X, augmented_xd, cluster_result = cluster_result_X, index = index, task = "in-domain")
-                MoCo_loss_yd = self.MoCo_train(self.MoCo_Y, augmented_yd, cluster_result = cluster_result_Y, index = index, task = "in-domain")
-                # MoCo_loss_mixed = self.MoCo_train(epoch,self.MoCo_mixed, augmented_d, cluster_result = None, index=index, task = "in-domain")
-            
-            if cluster_result_cross is not None:
-                if self.opt['time_encode']:
-                    MoCo_loss_xd_cross = self.MoCo_train(self.MoCo_X, augmented_xd, cluster_result = cluster_result_cross, index=None, task = "cross-domain",ts =ts_xd)
-                    MoCo_loss_yd_cross = self.MoCo_train(self.MoCo_Y, augmented_yd, cluster_result = cluster_result_cross, index=None, task = "cross-domain",ts =ts_xd)
-                else:
-                    MoCo_loss_xd_cross = self.MoCo_train(self.MoCo_X, augmented_xd, cluster_result = cluster_result_cross, index=None, task = "cross-domain")
-                    MoCo_loss_yd_cross = self.MoCo_train(self.MoCo_Y, augmented_yd, cluster_result = cluster_result_cross, index=None, task = "cross-domain")
-                ssl_loss += self.opt['cross_weight']*(MoCo_loss_xd_cross + MoCo_loss_yd_cross) + MoCo_loss_xd + MoCo_loss_yd
-            else:
-                ssl_loss += MoCo_loss_xd + MoCo_loss_yd
-            
-            
-        if self.opt['training_mode'] == 'joint_pretrain':
-            if self.opt['time_encode']:
-                
-                seqs_fea, x_seqs_fea, y_seqs_fea = self.model(seq, x_seq, y_seq, position, x_position, y_position, ts_d, ts_xd, ts_yd)
-            else:
-                
-                seqs_fea, x_seqs_fea, y_seqs_fea = self.model(seq, x_seq, y_seq, position, x_position, y_position)
-            used = 10
-            ground = ground[:,-used:]
-            ground_mask = ground_mask[:, -used:]
-            x_ground = x_ground[:, -used:]
-            x_ground_mask = x_ground_mask[:, -used:]
-            y_ground = y_ground[:, -used:]
-            y_ground_mask = y_ground_mask[:, -used:]
-
-            specific_x_result = self.model.lin_X(x_seqs_fea[:, -used:])  # b * seq * X_num
-            specific_x_pad_result = self.model.lin_PAD(x_seqs_fea[:, -used:])  # b * seq * 1
-            specific_x_result = torch.cat((specific_x_result, specific_x_pad_result), dim=-1)
-            specific_y_result = self.model.lin_Y( y_seqs_fea[:, -used:])       # b * seq * Y_num
-            specific_y_pad_result = self.model.lin_PAD(y_seqs_fea[:, -used:])  # b * seq * 1
-            specific_y_result = torch.cat((specific_y_result, specific_y_pad_result), dim=-1)
-            x_loss = self.pred_criterion(
-                specific_x_result.reshape(-1, self.opt["source_item_num"] + 1),
-                x_ground.reshape(-1))  # b * seq
-            y_loss = self.pred_criterion(
-                specific_y_result.reshape(-1, self.opt["target_item_num"] + 1),
-                y_ground.reshape(-1))  # b * seq
-            x_loss = (x_loss * (x_ground_mask.reshape(-1))).mean()
-            y_loss = (y_loss * (y_ground_mask.reshape(-1))).mean()
-            
-            #cross domain
-            share_x_ground = share_x_ground[:, -used:]
-            share_x_ground_mask = share_x_ground_mask[:, -used:]
-            share_y_ground = share_y_ground[:, -used:]
-            share_y_ground_mask = share_y_ground_mask[:, -used:]
-            share_x_result =  self.model.lin_X(seqs_fea[:,-used:]) # b * seq * X_num
-            share_y_result = self.model.lin_Y(seqs_fea[:, -used:])  # b * seq * Y_num
-            share_pad_result = self.model.lin_PAD(seqs_fea[:, -used:])  # b * seq * 1 #最後一維，即padding，score要是零
-            share_trans_x_result = torch.cat((share_x_result, share_pad_result), dim=-1)
-            share_trans_y_result = torch.cat((share_y_result, share_pad_result), dim=-1)
-            x_share_loss = self.pred_criterion(
-                share_trans_x_result.reshape(-1, self.opt["source_item_num"] + 1),
-                share_x_ground.reshape(-1))  # b * seq
-            y_share_loss = self.pred_criterion(
-                share_trans_y_result.reshape(-1, self.opt["target_item_num"] + 1),
-                share_y_ground.reshape(-1))
-            x_share_loss = (x_share_loss * (share_x_ground_mask.reshape(-1))).mean() #只取預測x的部分
-            y_share_loss = (y_share_loss * (share_y_ground_mask.reshape(-1))).mean() #只取預測y的部分
-            mixed_loss = x_share_loss + y_share_loss
-            loss = ssl_loss + x_loss + y_loss + mixed_loss
-        else:
-            loss = ssl_loss
-        
-        loss.backward()
-        self.optimizer.step()
-        if self.opt["time_encode"]:
-            accuracy = {"x":[speed_acc_xd,direction_acc_xd],"y":[speed_acc_yd,direction_acc_yd]}
-        else:
-            accuracy = None
-        if self.opt['training_mode']=='joint_pretrain':
-            return ssl_loss.item(), x_loss.item() , y_loss.item(), accuracy
-        else:
-            return ssl_loss.item(), 0, 0, accuracy
-    def valid_batch(self, epoch, batch, i, cluster_result):
-        self.model.eval()
-        with torch.no_grad():
-            cluster_result_X, cluster_result_Y, cluster_result_cross = cluster_result[0], cluster_result[1], cluster_result[2]
-            index, seq, x_seq, y_seq, position, x_position, y_position, ts_d, ts_xd, ts_yd, X_last, Y_last, XorY, ground_truth, neg_list, gender  = self.unpack_batch_valid(batch)
-            ssl_loss = torch.tensor(0, dtype = torch.float32).cuda()
-            acc = None
-            return ssl_loss.item(),acc
-    def generate_cluster(self,dataloader):
-        cluster_result_X, cluster_result_Y, cluster_result_cross = None, None, None
-        # x_domain
-        features_X = compute_features(self.opt, dataloader, self.MoCo_X, domain = 'X')
-        features_X[torch.norm(features_X,dim=1)>1.5] /= 2 #account for the few samples that are computed twice  
-        features_X = features_X.numpy()
-        cluster_result_X = run_kmeans(features_X, self.opt) 
-        # y_domain
-        features_Y = compute_features(self.opt, dataloader, self.MoCo_Y, domain = 'Y')
-        features_Y[torch.norm(features_Y,dim=1)>1.5] /= 2 
-        features_Y = features_Y.numpy()
-        cluster_result_Y = run_kmeans(features_Y, self.opt)
-        # mixed domain
-        if self.opt['mixed_included']:
-            features_cross = compute_features(self.opt, dataloader, self.model, domain = 'mixed')
-            features_cross[torch.norm(features_cross,dim=1)>1.5] /= 2 
-            features_cross = features_cross.numpy()
-            cluster_result_cross = run_kmeans(features_cross, self.opt)
-        return cluster_result_X, cluster_result_Y, cluster_result_cross
-    def train(self, num_epoch, train_dataloader, val_dataloader = None):
-        global_step = 0
-        ssl_loss_list = []
-        X_prediction_loss_list = []
-        Y_prediction_loss_list = []
-        val_ssl_loss_list = []
-        last_val_loss = float("inf")
-        patience = 0
-        for epoch in range(1, num_epoch+ 1):
-            pretrain_loss = 0
-            X_prediction_loss = 0
-            Y_prediction_loss = 0
-            speed_acc_xd = 0
-            direction_acc_xd = 0
-            speed_acc_yd = 0
-            direction_acc_yd = 0
-            epoch_start_time = time.time()
-            cluster_result_X = None
-            cluster_result_Y = None
-            cluster_result_cross = None          
-            if self.opt['ssl'] == "proto_CL":
-                if epoch >= self.opt['warmup_epoch']:
-                    cluster_result_X, cluster_result_Y, cluster_result_cross = self.generate_cluster(train_dataloader)
-            for i,batch in enumerate(train_dataloader):
-                global_step += 1
-                ssl_loss, X_pred_loss, Y_pred_loss ,accuracy = self.train_batch(epoch, batch, i, cluster_result = (cluster_result_X, cluster_result_Y, cluster_result_cross))
-                pretrain_loss += ssl_loss
-                X_prediction_loss += X_pred_loss 
-                Y_prediction_loss += Y_pred_loss
-                if accuracy is not None:
-                    speed_acc_xd += accuracy['x'][0]
-                    direction_acc_xd += accuracy['x'][1]
-                    speed_acc_yd += accuracy['y'][0]
-                    direction_acc_yd += accuracy['y'][1]
-            if epoch%10==0:
-                save_path = "pretrain_models/" +f"{str(self.opt['data_dir'])}/"  + str(self.opt['id']) +f"/{str(epoch)}"
-                Path(save_path).mkdir(parents=True, exist_ok=True)
-                self.save(save_path + "/pretrain_model.pt")
-            ssl_loss_list.append(pretrain_loss/len(train_dataloader))
-            X_prediction_loss_list.append(X_prediction_loss/len(train_dataloader))   
-            Y_prediction_loss_list.append(Y_prediction_loss/len(train_dataloader))
-            duration = time.time() - epoch_start_time
-            num_batch = len(train_dataloader)
-            print(self.format_str.format(datetime.now(), global_step, self.opt['num_epoch'] * num_batch, epoch, \
-                                            self.opt['num_epoch'], (pretrain_loss+X_prediction_loss+Y_prediction_loss)/num_batch, duration))
-            print("SSL loss:", pretrain_loss/num_batch)
-            print("X Prediction loss:", X_prediction_loss/num_batch)
-            print("Y Prediction loss:", Y_prediction_loss/num_batch)
-            print("speed_acc_xd:", speed_acc_xd/num_batch)
-            print("direction_acc_xd:", direction_acc_xd/num_batch)
-            print("speed_acc_yd:", speed_acc_yd/num_batch)
-            print("direction_acc_yd:", direction_acc_yd/num_batch)
-            # do validation for ssl
-            if epoch%self.opt['valid_epoch']==0:
-                if val_dataloader:
-                    val_pretrain_loss = 0
-                    val_speed_acc_xd = 0
-                    val_direction_acc_xd = 0
-                    val_speed_acc_yd = 0
-                    val_direction_acc_yd = 0
-                    cluster_result_X = None
-                    cluster_result_Y = None
-                    cluster_result_cross = None
-                    for i,batch in enumerate(val_dataloader):
-                        ssl_loss, accuracy = self.valid_batch(epoch, batch, i, cluster_result = (cluster_result_X, cluster_result_Y, cluster_result_cross))
-                        val_pretrain_loss += ssl_loss
-                        if accuracy is not None:
-                            val_speed_acc_xd += accuracy['x'][0]
-                            val_direction_acc_xd += accuracy['x'][1]
-                            val_speed_acc_yd += accuracy['y'][0]
-                            val_direction_acc_yd += accuracy['y'][1]
-                    print("----------------------------------------")
-                    print("validation SSL loss:", val_pretrain_loss/len(val_dataloader))
-                    if accuracy is not None:
-                        print("validation speed_acc_xd:", val_speed_acc_xd/len(val_dataloader))
-                        print("validation direction_acc_xd:", val_direction_acc_xd/len(val_dataloader))
-                        print("validation speed_acc_yd:", val_speed_acc_yd/len(val_dataloader)) 
-                        print("validation direction_acc_yd:", val_direction_acc_yd/len(val_dataloader))
-                    print("----------------------------------------")
-                    val_ssl_loss_list.append(val_pretrain_loss/len(val_dataloader))
-                    if last_val_loss>(val_pretrain_loss/len(val_dataloader)):
-                        last_val_loss = val_pretrain_loss/len(val_dataloader)
-                        patience = 0
-                    else:
-                        patience += 1
-                        print("patience:",patience)
-                        if patience>=self.opt['pretrain_patience']:
-                            print("\033[01;32m early stop for SSL !!!!\033[0m\n")
-                            save_path = "pretrain_models/" +f"{str(self.opt['data_dir'])}/"  + str(self.opt['id']) +f"/best_pretrain_model_epoch{str(epoch)}"
-                            # print("save_path:",save_path)
-                            Path(save_path).mkdir(parents=True, exist_ok=True)
-                            self.save(save_path + "/pretrain_model.pt")
-                            break
-        loss_save_path = f"./loss/{self.opt['data_dir']}/{self.opt['id']}"
-        print(f"write loss into path {loss_save_path}")
-        Path(loss_save_path).mkdir(parents=True, exist_ok=True)
-        np.save(f"{loss_save_path}/ssl_loss.npy", np.array(ssl_loss_list))
-        np.save(f"{loss_save_path}/X_prediction_loss.npy", np.array(X_prediction_loss_list))
-        np.save(f"{loss_save_path}/Y_prediction_loss.npy", np.array(Y_prediction_loss_list))
-        np.save(f"{loss_save_path}/val_ssl_loss.npy", np.array(val_ssl_loss_list))
 class CDSRTrainer(Trainer):
     def __init__(self, opt):
         self.opt = opt
