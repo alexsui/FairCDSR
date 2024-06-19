@@ -1,0 +1,11 @@
+*.txt
+*.pt
+*.csv
+__pycache__/
+*.ipynb_checkpoints/
+__MACOSX/
+generator_model/
+models/
+*.json
+saved_models/
+*.dat
