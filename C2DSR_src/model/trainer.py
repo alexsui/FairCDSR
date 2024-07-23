@@ -11,11 +11,9 @@ import time
 from pathlib import Path
 from utils import torch_utils
 from model.FairCDSR import FairCDSR
-from model.MoCo import MoCo
 from model.MoCo_new import MoCo_Interest
 from utils.MoCo_utils import compute_features, compute_embedding_for_target_user,compute_features_for_I2C
 from utils.cluster import run_kmeans
-from scipy.spatial import distance
 from model.FairCDSR import *
 from utils.loader import CustomDataLoader,NonoverlapDataLoader
 from utils.torch_utils import *
@@ -628,12 +626,16 @@ class CDSRTrainer(Trainer):
             return loss
 
         def process_task(seqs_fea, x_seqs_fea=None, y_seqs_fea=None, x_only=False, y_only=False):
+            if x_only:
+                linear = self.model.lin_X
+            else:
+                linear = self.model.lin_Y
             if seqs_fea is not None:
-                share_result = self.model.lin_X(seqs_fea[:, -used:]) if x_only else self.model.lin_Y(seqs_fea[:, -used:])
+                share_result = linear(seqs_fea[:, -used:]) if x_only else self.model.lin_Y(seqs_fea[:, -used:])
                 share_pad_result = self.model.lin_PAD(seqs_fea[:, -used:])
                 share_trans_result = torch.cat((share_result, share_pad_result), dim=-1)
                 specific_fea = x_seqs_fea if x_only else y_seqs_fea
-                specific_result = self.model.lin_X(seqs_fea[:,-used:]+specific_fea[:, -used:]) if x_only else self.model.lin_Y(seqs_fea[:,-used:]+specific_fea[:, -used:])
+                specific_result = linear(seqs_fea[:,-used:]+specific_fea[:, -used:]) if x_only else self.model.lin_Y(seqs_fea[:,-used:]+specific_fea[:, -used:])
                 specific_pad_result = self.model.lin_PAD(specific_fea[:, -used:])
                 specific_trans_result = torch.cat((specific_result, specific_pad_result), dim=-1)
 
@@ -648,10 +650,11 @@ class CDSRTrainer(Trainer):
                 self.prediction_loss += (share_loss.item() + specific_loss.item())
             else:
                 specific_fea = x_seqs_fea if x_only else y_seqs_fea
-                specific_result = self.model.lin_X(specific_fea[:, -used:])
+                specific_result = linear(specific_fea[:, -used:])
                 specific_pad_result = self.model.lin_PAD(specific_fea[:, -used:])
-                specific_trans_result = self.concat_results(specific_result, specific_pad_result)
-                loss = self.compute_loss(specific_trans_result, x_ground if x_only else y_ground, x_ground_mask if x_only else y_ground_mask)
+                specific_trans_result = torch.cat((specific_result, specific_pad_result), dim = -1)
+                target = 'X' if x_only else 'Y'
+                loss = compute_loss(specific_trans_result, x_ground if x_only else y_ground, x_ground_mask if x_only else y_ground_mask, target)
                 self.prediction_loss += loss.item()
             if self.opt['training_mode'] == "joint_learn":
                 additional_loss = compute_additional_loss()

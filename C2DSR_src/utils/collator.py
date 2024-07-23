@@ -1,10 +1,9 @@
-from argparse import Namespace
 import torch
-from utils.augmentation import *
 import ipdb
 from sklearn.preprocessing import StandardScaler
-import pandas as pd
 import json
+import random
+import numpy as np
 from utils.torch_utils import get_item_embedding_for_sequence
 class CLDataCollator:
     def __init__(self, opt, eval, mixed_generator,attribute_predictor=None,model=None) -> None:

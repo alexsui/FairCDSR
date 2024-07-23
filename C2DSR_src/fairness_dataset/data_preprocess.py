@@ -1,6 +1,7 @@
 import pandas as pd
 import random
 import glob 
+import sys
 def preprocess(folder, dataset_name):
     random.seed(2023)
     data1,data2 = folder.split("_")
@@ -190,7 +191,7 @@ def preprocess(folder, dataset_name):
     save_sequences_to_txt(f'{folder_name}/test.txt', overlapped_test_data, number_of_A_item, number_of_B_item)
         
 if __name__ == '__main__':
-    dataset_name = "Movie_lens_main"    
+    dataset_name = sys.argv[1]    
     folder_list = glob.glob(f"./{dataset_name}/*")
     folder_list = [x.split("/")[-1] for x in folder_list]
     print(folder_list)

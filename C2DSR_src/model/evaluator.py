@@ -12,7 +12,7 @@ class Evaluator:
         self.model_save_dir = f"./models/{self.opt['data_dir']}/{self.opt['id']}/{self.opt['seed']}"
         self.dev_score_history = [0]
         self.val_pred_loss = []
-        self.patience = self.opt["finetune_patience"]
+        self.patience = self.opt["finetune_patience"] #5
         self.if_early_stop = False
         self.CS_criterion = torch.nn.CrossEntropyLoss(reduction='none')
     def save(self, filename):

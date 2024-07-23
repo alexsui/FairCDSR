@@ -4,7 +4,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument(
     "--data_dir",
     type=str,
-    default="action_comedy",
+    default="sci-fi_thriller",
 )
 parser.add_argument(
     "--dataset",
@@ -56,7 +56,7 @@ parser.add_argument("--lambda", type=float, default=0.7)
 
 # train part
 parser.add_argument(
-    "--num_epoch", type=int, default=10, help="Number of total training epochs."
+    "--num_epoch", type=int, default=200, help="Number of total training epochs."
 )
 parser.add_argument("--batch_size", type=int, default=256, help="Training batch size.")
 parser.add_argument(
@@ -74,7 +74,7 @@ parser.add_argument(
 parser.add_argument(
     "--id", type=str, default=00, help="Model ID under which to save models."
 )
-parser.add_argument("--seed", type=int, default=2023)
+parser.add_argument("--seed", type=int, default=2024)
 parser.add_argument(
     "--load",
     dest="load",
@@ -142,21 +142,21 @@ parser.add_argument('--topk', type=int,default= 10 ,help="topk item recommendati
 # item augmentation
 parser.add_argument('--generate_type',type=str,default= "X" ,help="[X,Y,mixed]")
 parser.add_argument('--generate_num',type=int,default= 5 ,help="number of item to generate")
-parser.add_argument('--alpha',type=float,default= 0.4 ,help="insertion ration for DGSA")
+parser.add_argument('--alpha',type=float,default= 0.3 ,help="insertion ration for DGSA")
 # nonoverlap user augmentation
 parser.add_argument('--augment_size',type=int,default= 30 ,help="nonoverlap_augment size")
 #GMiT
-parser.add_argument('--topk_cluster',type=str,default= 7 ,help="number of multi-view cluster")
-parser.add_argument('--num_cluster', type=str, default= '100,100,200' ,help="number of clusters for kmeans")
+parser.add_argument('--topk_cluster',type=str,default= 3 ,help="number of multi-view cluster")
+parser.add_argument('--num_cluster', type=str, default= '300,300,300' ,help="number of clusters for kmeans")
 parser.add_argument('--cluster_mode',type=str,default= "separate" ,help="separate or joint")
 parser.add_argument('--warmup_epoch', type=int, default= 0 ,help="warmup epoch for cluster")
 parser.add_argument('--cluster_ratio',type=float, default= 0.5 ,help="cluster ratio")
 parser.add_argument('--cluster_algo',type=str, default= 'prototype' ,help="[prototype, kmeans]")
 #group CL
-parser.add_argument('--substitute_ratio',type=float, default= 0.6 ,help="substitute ratio")
+parser.add_argument('--substitute_ratio',type=float, default= 0.8 ,help="substitute ratio")
 parser.add_argument('--substitute_mode',type=str, default= "hybrid" ,help="IR, attention_weight")
 # loss weight
-parser.add_argument('--lambda_',nargs='*', default= [1,1] ,help="loss weight")
+parser.add_argument('--lambda_',nargs='*', default= [0.6,0.4] ,help="loss weight")
 
 parser.add_argument('--C2DSR',type=bool,default= False ,help="if use C2DSR")
 

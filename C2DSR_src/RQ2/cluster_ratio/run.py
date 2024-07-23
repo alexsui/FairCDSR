@@ -41,6 +41,7 @@ for data_dir, cluster_number in zip(data_dirs,cluster_numbers):
             is_baseline = False
             df = pd.DataFrame([[is_baseline,i,cluster_number,cluster_ratio]+best_Y_test+best_Y_test_male+best_Y_test_female],columns = columns_name)
             res_df = pd.concat([res_df,df],axis=0)
+        #vanilla model
         args.data_dir = data_dir
         args.dataset = dataset
         args.seed = i

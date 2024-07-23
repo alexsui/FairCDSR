@@ -11,7 +11,7 @@ from config.config import get_args
 
 args  = get_args()
 training_settings = ['FairCDSR',"single","C2DSR"]
-dataset = "reverse_1and45age_dataset"
+dataset = "RQ5_dataset/1and45age_dataset"
 alphas = [0.5]
 substitute_ratios = [0.5,0.6,0.7,0.8]
 data_dirs = glob.glob(f"./fairness_dataset/{dataset}/*")
@@ -27,7 +27,7 @@ for  data_dir in data_dirs:
         for seed in range(0,1):
             args.data_dir = data_dir
             args.dataset = f"{dataset}"
-            args.id = f"RQ6_{training_setting}"  
+            args.id = f"RQ5_{training_setting}"  
             args.seed = seed
             args.num_epoch = 200
             if training_setting == "single":
@@ -53,7 +53,7 @@ for  data_dir in data_dirs:
                     for substitute_ratio in substitute_ratios:
                         args.alpha = alpha
                         args.substitute_ratio = substitute_ratio
-                        args.id = f"RQ6_{training_setting}_alpha{alpha}_sub{substitute_ratio}"
+                        args.id = f"RQ5_{training_setting}_alpha{alpha}_sub{substitute_ratio}"
                         args.domain = "cross"
                         args.training_mode = "joint_learn"
                         args.ssl = "both"
@@ -63,5 +63,5 @@ for  data_dir in data_dirs:
                         best_Y_test,best_Y_test_male,best_Y_test_female = main(args)
                         df = pd.DataFrame([[data_dir, training_setting, seed,alpha,substitute_ratio]+best_Y_test+best_Y_test_male+best_Y_test_female],columns = columns_name)
                         res_df = pd.concat([res_df,df],axis=0)
-Path(f"./RQ6/reverse_1and45/result").mkdir(parents=True, exist_ok=True)
-res_df.to_csv(f"./RQ6/reverse_1and45/result/res.csv")
+Path(f"./RQ5/1and45/result").mkdir(parents=True, exist_ok=True)
+res_df.to_csv(f"./RQ5/1and45/result/res.csv")

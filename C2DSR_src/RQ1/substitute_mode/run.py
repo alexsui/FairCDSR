@@ -10,7 +10,7 @@ from train_rec import main
 from config.config import get_args
 args = get_args()
 substitute_modes = ["attention_weight", "AGIR", "DGIR", 'hybrid', 'random'] 
-dataset = "tmp_for_main"
+dataset = "Movie_lens_main"
 data_dirs = glob.glob(f"./fairness_dataset/{dataset}/*")
 data_dirs = [x.split("/")[-1] for x in data_dirs] 
 for data_dir in data_dirs:

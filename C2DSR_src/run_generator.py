@@ -1,8 +1,9 @@
 from train_generator import main
 import glob
 from config.config import get_args
+import sys
 args = get_args()
-dataset = "Movie_lens_main"
+dataset = sys.argv[1]
 folder_list = glob.glob(f"./fairness_dataset/{dataset}/*")
 data_dir = [x.split("/")[-1] for x in folder_list]
 print(data_dir)
@@ -16,4 +17,5 @@ for data_idx in range(len(data_dir)):
         args.generate_type = generate_type
         args.id = f"{generate_type}"
         args.dataset = dataset
+        args.save_dir = "generator_model"
         main(args)

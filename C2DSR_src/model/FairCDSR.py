@@ -3,75 +3,10 @@ import torch
 import torch.nn as nn
 import math
 from sklearn.preprocessing import StandardScaler
-class TimeEncoder(torch.nn.Module):
-    # def __init__(self, opt, expand_dim): 
-    #     super(TimeEncoder, self).__init__()
-    #     self.non_periodic = nn.Linear(1, 2)        
-    #     self.periodic = nn.Linear(1, (expand_dim - 2) // 2)  # Adjust for sine and cosine
-
-    # def forward(self, ts):
-    #     ts = ts.unsqueeze(-1).float()  # [B, seq_len, 1]
-    #     non_periodic = self.non_periodic(ts)
-    #     periodic_input = self.periodic(ts)
-    #     periodic = torch.cat([torch.sin(periodic_input), torch.cos(periodic_input)], -1)
-    #     out = torch.cat([non_periodic, periodic], -1)
-    #     return out
-    def __init__(self,opt) -> None:
-        super().__init__()
-        self.linear = torch.nn.Linear(8, opt['hidden_units'])
-        self.relu = torch.nn.ReLU()
-    def encode_time_features(self,timestamp_list):
-        # Convert the timestamp list to a NumPy array if it's not already
-        timestamps = timestamp_list.cpu().numpy()
-        # Calculate datetime features using NumPy
-        datetimes = timestamps.astype('datetime64[s]')
-        times_of_day = (datetimes.astype('datetime64[h]').astype(int) % 24) + \
-                    (datetimes.astype('datetime64[m]').astype(int) % 60) / 60
-        days_of_week = (datetimes.astype('datetime64[D]').astype(int) + 3) % 7  # -3 to align Monday=0
-        days_of_month = datetimes.astype('datetime64[M]').astype(int) % 30  
-        days_of_year = (datetimes.astype('datetime64[D]').astype(int)-12) % 365  # Approximation, ignoring leap years
-        times_of_day_sin = np.sin(2 * np.pi * times_of_day / 24)
-        times_of_day_cos = np.cos(2 * np.pi * times_of_day / 24)
-        days_of_week_sin = np.sin(2 * np.pi * days_of_week / 7)
-        days_of_week_cos = np.cos(2 * np.pi * days_of_week / 7)
-        days_of_month_sin = np.sin(2 * np.pi * days_of_month / 30)
-        days_of_month_cos = np.cos(2 * np.pi * days_of_month / 30)
-        days_of_year_sin = np.sin(2 * np.pi * days_of_year / 365)
-        days_of_year_cos = np.cos(2 * np.pi * days_of_year / 365)
-        
-        # Stack the features
-        time_features = np.stack((times_of_day_sin, times_of_day_cos,
-                                days_of_week_sin, days_of_week_cos,days_of_month_sin, days_of_month_cos,
-                                days_of_year_sin, days_of_year_cos
-                                ), axis=-1)
-        
-        # Initialize the scaler
-        scaler = StandardScaler()
-        
-        # Reshape for scaling
-        original_shape = time_features.shape
-        time_features = time_features.reshape(-1, original_shape[-1])
-        
-        # Scale the features
-        time_features = scaler.fit_transform(time_features)
-        
-        # Reshape back to the original shape
-        time_features = time_features.reshape(original_shape)
-        
-        # Convert to a PyTorch tensor and send to CUDA
-        return torch.FloatTensor(time_features).cuda()
-    def forward(self, ts):
-        time_features =  self.encode_time_features(ts)
-        time_embedding = self.linear(time_features)
-        time_embedding = self.relu(time_embedding)
-        return time_embedding
-
-
 class PointWiseFeedForward(torch.nn.Module):
     def __init__(self, hidden_units, dropout_rate):
 
         super(PointWiseFeedForward, self).__init__()
-
         self.conv1 = torch.nn.Conv1d(hidden_units, hidden_units, kernel_size=1)
         self.dropout1 = torch.nn.Dropout(p=dropout_rate)
         self.relu = torch.nn.ReLU()
@@ -89,9 +24,6 @@ class PointWiseFeedForward(torch.nn.Module):
         outputs += inputs
         return outputs
 
-# pls use the following self-made multihead attention layer
-# in case your pytorch version is below 1.16 or for other reasons
-# https://github.com/pmixer/TiSASRec.pytorch/blob/master/model.py
 
 
 class scaled_dot_product_attention(torch.nn.Module):
@@ -146,22 +78,11 @@ class ATTENTION(torch.nn.Module):
         self.forward_layernorms = torch.nn.ModuleList()
         self.forward_layers = torch.nn.ModuleList()
         self.last_layernorm = torch.nn.LayerNorm(self.opt["hidden_units"], eps=1e-8)
-        
-        # Time attention
-        if self.opt['time_encode']:
-            self.time_encoder = TimeEncoder(opt)
-            # self.multiTimeAttention = MultiHeadAttention(self.opt["num_heads"], self.opt["time_embed"], self.opt["hidden_units"], self.opt["dropout"])
-            # self.linear = torch.nn.Linear(1, 1)
-            # self.periodic = torch.nn.Linear(1, self.opt['time_embed']-1)
             
             
         for _ in range(self.opt["num_blocks"]):
             new_attn_layernorm = torch.nn.LayerNorm(self.opt["hidden_units"], eps=1e-8)
             self.attention_layernorms.append(new_attn_layernorm)
-
-            # new_attn_layer =  torch.nn.MultiheadAttention(self.opt["hidden_units"],
-            #                                                 self.opt["num_heads"],
-            #                                                 self.opt["dropout"])
             new_attn_layer = MultiHeadAttention(self.opt["num_heads"], self.opt["hidden_units"], self.opt["hidden_units"], self.opt["dropout"])
             self.attention_layers.append(new_attn_layer)
 
@@ -192,18 +113,11 @@ class ATTENTION(torch.nn.Module):
             # print("extended_attention_mask:", extended_attention_mask.shape) #[B,1,seq_len,seq_len]
         else:
             attention_mask = timeline_mask.unsqueeze(1).unsqueeze(2)#[B,1,1,seq_len]
-
-        
-        if self.opt['time_encode'] and ts is not None:
-            ts_embed = self.time_encoder(ts)
-            # seqs,_ = self.multiTimeAttention(ts_embed, ts_embed, seqs, mask = attention_mask)
-            seqs += ts_embed
         seqs += self.pos_emb(position)
         seqs = self.emb_dropout(seqs)
         seqs *= timeline_mask.unsqueeze(-1) # broadcast in last dim ,過濾掉padding的部分=>padding的部分embedding為0
         
         for i in range(len(self.attention_layers)):
-            # seqs = torch.transpose(seqs, 0, 1) #不用把Batch_size放到最前面
             Q = self.attention_layernorms[i](seqs)
             mha_outputs, _ = self.attention_layers[i](Q, seqs, seqs, mask = attention_mask)
             seqs = Q + mha_outputs # residual connection
@@ -366,14 +280,6 @@ class ClusterRepresentation(nn.Module):
         )
         
     def forward(self, features):
-        # features = features[gender==self.gender]
-        # indices = torch.where(gender==self.gender)[0]
-        # mapping = torch.empty(indices.max() + 1)
-        # if self.opt['cuda']:
-        #     mapping = mapping.cuda()
-        # Populate the lookup tensor with mapped values
-        # for i, v in enumerate(indices):
-        # mapping[v] = i
         sim = features@self.cluster_prototypes.T #[X, num_clusters]
         sim /= sim.max(-1,keepdim = True)[0]
         weight = torch.softmax(sim, dim=-1)

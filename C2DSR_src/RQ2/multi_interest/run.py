@@ -42,5 +42,5 @@ for data_dir, cluster_number,cluster_ratio in zip(data_dirs,cluster_numbers,clus
             best_Y_test,best_Y_test_male,best_Y_test_female = main(args)
             df = pd.DataFrame([[i,topk_cluster]+best_Y_test+best_Y_test_male+best_Y_test_female],columns = columns_name)
             res_df = pd.concat([res_df,df],axis=0)
-    Path(f"./RQ2/multi_cluster/multi_cluster_res/").mkdir(parents=True, exist_ok=True)
-    res_df.to_csv(f"./RQ2/multi_cluster/multi_cluster_res/{data_dir}.csv")
+    Path(f"./RQ2/multi_interest/multi_interest_res/").mkdir(parents=True, exist_ok=True)
+    res_df.to_csv(f"./RQ2/multi_interest/multi_interest_res/{data_dir}.csv")

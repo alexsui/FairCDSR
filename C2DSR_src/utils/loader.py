@@ -8,7 +8,6 @@ import copy
 import ipdb
 from torch.utils.data import DataLoader
 from sklearn.preprocessing import StandardScaler
-from utils.augmentation import *
 from utils.MoCo_utils import compute_embedding_for_female_mixed_user
 import pandas as pd 
 class VanillaDataLoader(DataLoader): # Base class for all data loaders
@@ -171,8 +170,8 @@ class CustomDataLoader(VanillaDataLoader):
         """
         Generate new items for the input sequences according to assigned type.
         """
-        with open(f"./fairness_dataset/{self.opt['dataset']}/{self.opt['data_dir']}/item_IF.json", "r") as f:
-            item_if = json.load(f)
+        # with open(f"./fairness_dataset/{self.opt['dataset']}/{self.opt['data_dir']}/item_IF.json", "r") as f:
+        #     item_if = json.load(f)
         # Choose the correct generator based on the type
         if type == "X":
             generator = self.source_generator
@@ -217,18 +216,7 @@ class CustomDataLoader(VanillaDataLoader):
                 probabilities = probabilities / probabilities.sum(dim=1, keepdim=True)
 
                 sampled_indices = torch.multinomial(probabilities, 5, replacement=False).squeeze()  # [X, 10]
-
-                # Insert high interaction fairness score item
-                mapping = torch.zeros(self.opt['source_item_num'] + self.opt['target_item_num'], dtype=torch.float32)
-                if self.opt['cuda']:
-                    mapping = mapping.cuda()
-
-                for k in item_if.keys():
-                    mapping[int(k)] = item_if[k]
-
-                random_idx = torch.randint(0, 3, (len(sampled_indices),))
-                selected_idx_index = mapping[sampled_indices].topk(k=3, dim=-1)[1][torch.arange(len(sampled_indices)), random_idx]
-
+                selected_idx_index = torch.randint(0, 5, (len(sampled_indices),))
                 sampled_indices = sampled_indices[torch.arange(len(sampled_indices)), selected_idx_index]
                 if type == "Y":
                     sampled_indices = sampled_indices + self.opt['source_item_num']
