@@ -7,6 +7,34 @@ then you need to install pytorch independently:
 ```bash
 pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
 ```
+## Dataset folder structure (fairness_dataset)
+├── **calculate_IR.ipynb**
+├── **data_preprocess.py**
+├── **ml_raw_data**
+│   ├── mid_preprocess.ipynb
+│   ├── movies.dat
+│   ├── ratings.dat
+│   └── users.dat
+├── **Movie_lens_main**
+│   ├── action_comedy
+│   │   ├── Action_Comedy_overlapped.csv
+│   │   ├── Action.csv
+│   │   ├── Comedy.csv
+│   │   ├── female_IR.json
+│   │   ├── item_IF.json
+│   │   ├── male_IR.json
+│   │   ├── non_overlapped_Action.csv
+│   │   ├── non_overlapped_Comedy.csv
+│   │   ├── test.txt
+│   │   ├── train.txt
+│   │   └── valid.txt
+│   ├── comedy_drama (same structure as action_comedy)
+│   ├── drama_sci-fi (same structure as action_comedy)
+│   └── sci-fi_thriller (same structure as action_comedy)
+├── **RQ3_dataset**
+├── **RQ4_dataset**
+ **Note that RQ3_dataset and RQ4_dataset use the same folder structure as Movie_lens_main, so we omit it for brevity.**
+
 ## Data Preprocessing
 
 This section describes the scripts used for data preprocessing and their purposes:
@@ -24,7 +52,7 @@ This section describes the scripts used for data preprocessing and their purpose
      ```bash
      python data_preprocess.py [dataset_name]
      ```
-        where `[dataset_name]` can be "Movie_lens_main"（for RQ1~3）, "RQ4_dataset", "RQ5_dataset"
+        where `[dataset_name]` can be "Movie_lens_main", "RQ4_dataset", "RQ5_dataset"
     - **Output file example**: 
         - Action_Comedy_overlapped.csv
         - non_overlapped_Action.csv
@@ -66,8 +94,8 @@ python train_rec.py
 ```
 For **optimized results**, you need to locate the optimal hyperparameters stored in the RQ3 folder within the specific scenario folder. The contents in this folder will show results similar to this:
 `best_params :{'alpha': 0.4, 'topk_cluster': 5, 'num_clusters_option': '300,300,300', 'substitute_ratio': 0.7, 'lambda_0': 0.8, 'lambda_1': 1.0}`
-then you can set these hyperparameters in `config` folder and run `python train_rec.py` to get the results.
-### Retrieving Results for Specific Research Questions
+then you can set these hyperparameters in `config` folder and run `python train_rec.py` to get the results, which will be stored in the `saved_models` folder, inside a subfolder named with the `id`.
+### Obtaining Results for Specific Research Questions(still required training)
 
 For detailed results associated with different research questions, follow the guidelines provided for each RQ:
 * **For RQ1, RQ2, RQ4, and RQ5:**
@@ -86,3 +114,4 @@ Run the following command, replacing `[num]` with the research question number (
     ```
     python RQ3/param_tuning.py
     ```
+    the results will be stored in the `saved_models` folder, inside a subfolder named with the `id`.

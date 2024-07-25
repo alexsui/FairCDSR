@@ -101,7 +101,7 @@ class Evaluator:
                 print('.', end='')
         if valid_entity == 0:
             valid_entity = 1
-        return MRR/valid_entity, NDCG_5 / valid_entity, NDCG_10 / valid_entity, HR_1 / valid_entity, HR_5 / (valid_entity*2/3), HR_10 / (valid_entity*2/3)
+        return MRR/valid_entity, NDCG_5 / valid_entity, NDCG_10 / valid_entity, HR_1 / valid_entity, HR_5 / valid_entity, HR_10 / valid_entity
     
     def get_evaluation_result(self, evaluation_batch, mode = "valid", target = "Y"):
         total_pred = []
@@ -272,10 +272,6 @@ class Evaluator:
                 EO_Y_pred_male_dist[num] = count
                 EO_Y_pred_male_dist = EO_Y_pred_male_dist.to(torch.float32)/Y_pred_male_num
                 Y_EO = distance.jensenshannon(EO_Y_pred_female_dist+1e-12, EO_Y_pred_male_dist+1e-12).item() if Y_pred_female_dist is not None else None
-                    
-            # except:
-            #     ipdb.set_trace()
-            #     pass
 
         
         print("number of X tested male:",X_pred_male_num)

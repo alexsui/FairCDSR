@@ -41,7 +41,7 @@ def main(args):
     # save config
     helper.save_config(opt, model_save_dir + '/config.json', verbose=True)
     file_logger = helper.FileLogger(model_save_dir + '/' + opt['log'],
-                                    header="# test_MRR\ttest_NDCG_10\ttest_HR_10")
+                                    header="# test_MRR\ttest_NDCG_5\ttest_NDCG_10\ttest_HR_5\ttest_HR_10")
 
     # print model info
     helper.print_config(opt)
