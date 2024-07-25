@@ -8,14 +8,15 @@ then you need to install pytorch independently:
 pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
 ```
 ## Dataset folder structure (fairness_dataset)
-├── **calculate_IR.ipynb**
-├── **data_preprocess.py**
-├── **ml_raw_data**
+```
+├── calculate_IR.ipynb
+├── data_preprocess.py
+├── ml_raw_data
 │   ├── mid_preprocess.ipynb
 │   ├── movies.dat
 │   ├── ratings.dat
 │   └── users.dat
-├── **Movie_lens_main**
+├── Movie_lens_main
 │   ├── action_comedy
 │   │   ├── Action_Comedy_overlapped.csv
 │   │   ├── Action.csv
@@ -31,8 +32,9 @@ pip3 install torch torchvision torchaudio --index-url https://download.pytorch.o
 │   ├── comedy_drama (same structure as action_comedy)
 │   ├── drama_sci-fi (same structure as action_comedy)
 │   └── sci-fi_thriller (same structure as action_comedy)
-├── **RQ3_dataset**
-├── **RQ4_dataset**
+├── RQ3_dataset
+├── RQ4_dataset
+```
  **Note that RQ3_dataset and RQ4_dataset use the same folder structure as Movie_lens_main, so we omit it for brevity.**
 
 ## Data Preprocessing
